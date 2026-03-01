@@ -1,0 +1,14 @@
+[project]
+name = "avalancheriskareamapper"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "folium>=0.20.0",
+    "geopandas>=1.1.2",
+    "pyogrio>=0.12.1",
+    "shapely>=2.1.2",
+    "streamlit>=1.54.0",
+    "streamlit-folium>=0.26.2",
+]
