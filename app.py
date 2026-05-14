@@ -207,11 +207,11 @@ if st.session_state.draw_mode == "draw_expertise":
 elif st.session_state.draw_mode == "draw_release":
     st.info("Draw potential avalanche release polygons inside the area of expertise. Double-click to finish each polygon.")
 
-st.selectbox(
-    "Basemap",
-    options=["Default", "Satellite Imagery", "Terrain"],
-    key="selected_basemap",
-)
+# st.selectbox(
+#     "Basemap",
+#     options=["Default", "Satellite Imagery", "Terrain"],
+#     key="selected_basemap",
+# )
 
 map_key = "main_map"
 sync_map_view_from_widget_state(map_key)
@@ -233,8 +233,8 @@ folium.LayerControl(collapsed=True).add_to(map_object)
 
 map_data = st_folium(
     map_object,
-    width=1200,
-    height=620,
+    width=2000,
+    height=800,
     key=map_key,
     returned_objects=["last_active_drawing"],
     feature_group_to_add=build_feature_group(),
