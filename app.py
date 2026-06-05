@@ -71,6 +71,7 @@ def init_state() -> None:
         "login_error": "",
         "logged_in_username": "",
         "logged_in_email": "",
+        "show_request_account_dialog": False,
         "release_features": [],
         "selected_release_id": None,
         "next_release_id": 1,
@@ -81,6 +82,8 @@ def init_state() -> None:
         "map_refresh_counter": 0,
         "ignored_active_drawing_signature": None,
         "show_about_on_login": False,
+        "show_about_dialog": False,
+        "about_page": 0,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -222,8 +225,6 @@ def send_results_email(
     comments: str = "",
 ) -> None:
     """Send the generated results zip as an email attachment."""
-    smtp_config = get_smtp_config()
-
     submitter_name = submitter_name.strip()
     submitter_email = submitter_email.strip()
     comments = comments.strip()
@@ -237,17 +238,41 @@ def send_results_email(
     if comments:
         body_lines.extend(["", "Comments:", comments])
 
+    send_email_message(
+        subject=f"Avalanche Release Area Mapper Results - {submitter_name or 'Unknown Submitter'}",
+        body="\n".join(body_lines),
+        attachments=[
+            {
+                "payload": zip_payload,
+                "maintype": "application",
+                "subtype": "zip",
+                "filename": build_results_zip_filename(submitter_name),
+            }
+        ],
+    )
+
+
+def send_email_message(
+    subject: str,
+    body: str,
+    attachments: list[dict] | None = None,
+) -> None:
+    """Send an email using configured SMTP settings with optional attachments."""
+    smtp_config = get_smtp_config()
+
     message = EmailMessage()
-    message["Subject"] = f"Avalanche Release Area Mapper Results - {submitter_name or 'Unknown Submitter'}"
+    message["Subject"] = subject
     message["From"] = smtp_config["from_email"]
     message["To"] = RESULTS_RECIPIENT
-    message.set_content("\n".join(body_lines))
-    message.add_attachment(
-        zip_payload,
-        maintype="application",
-        subtype="zip",
-        filename=build_results_zip_filename(submitter_name),
-    )
+    message.set_content(body)
+
+    for attachment in attachments or []:
+        message.add_attachment(
+            attachment["payload"],
+            maintype=attachment["maintype"],
+            subtype=attachment["subtype"],
+            filename=attachment["filename"],
+        )
 
     smtp_context = ssl.create_default_context()
     with smtplib.SMTP(smtp_config["host"], smtp_config["port"], timeout=30) as server:
@@ -257,6 +282,35 @@ def send_results_email(
             server.ehlo()
         server.login(smtp_config["username"], smtp_config["password"])
         server.send_message(message)
+
+
+def send_account_request_email(
+    first_name: str,
+    last_name: str,
+    email_address: str,
+    job_title: str,
+    organization: str,
+    avalanche_work_description: str,
+) -> None:
+    """Send account request details to the configured results recipient."""
+    body_lines = [
+        "New account request for Avalanche Release Area Mapping Tool.",
+        "",
+        f"First Name: {first_name}",
+        f"Last Name: {last_name}",
+        f"Email Address: {email_address}",
+        f"Job Title: {job_title}",
+        f"Organization: {organization}",
+        "",
+        "Describe your work with avalanches:",
+        avalanche_work_description,
+    ]
+
+    requester_name = f"{first_name} {last_name}".strip()
+    send_email_message(
+        subject=f"Avalanche Mapper Account Request - {requester_name or 'Unknown Requester'}",
+        body="\n".join(body_lines),
+    )
 
 
 def draw_control_for_mode() -> dict:
@@ -478,29 +532,169 @@ def login_dialog() -> None:
             st.rerun()
         else:
             st.session_state.login_error = "Invalid username or password"
+
+    st.markdown("Don't have an account? [Request one now!](?request_account=1)")
     
     if st.session_state.login_error:
         st.error(st.session_state.login_error)
 
 
+@st.dialog("Request an Account")
+def request_account_dialog() -> None:
+    st.write("Complete this form to request an account.")
+
+    first_name = st.text_input("First Name", key="request_first_name")
+    last_name = st.text_input("Last Name", key="request_last_name")
+    email_address = st.text_input("Email Address", key="request_email_address")
+    job_title = st.text_input("Job Title", key="request_job_title")
+    organization = st.text_input("Organization", key="request_organization")
+    avalanche_work_description = st.text_area(
+        "Describe your work with avalanches",
+        key="request_avalanche_work_description",
+        height=140,
+    )
+
+    submit_col, cancel_col = st.columns([1, 1])
+    with submit_col:
+        if st.button("Submit Request", type="primary", use_container_width=True):
+            required_values = {
+                "First Name": first_name.strip(),
+                "Last Name": last_name.strip(),
+                "Email Address": email_address.strip(),
+                "Job Title": job_title.strip(),
+                "Organization": organization.strip(),
+                "Describe your work with avalanches": avalanche_work_description.strip(),
+            }
+            missing_fields = [label for label, value in required_values.items() if not value]
+
+            if missing_fields:
+                st.error(f"Please complete all fields: {', '.join(missing_fields)}")
+            else:
+                with st.spinner("Submitting request..."):
+                    try:
+                        send_account_request_email(
+                            first_name=required_values["First Name"],
+                            last_name=required_values["Last Name"],
+                            email_address=required_values["Email Address"],
+                            job_title=required_values["Job Title"],
+                            organization=required_values["Organization"],
+                            avalanche_work_description=required_values["Describe your work with avalanches"],
+                        )
+                    except Exception as exc:
+                        st.error(f"Could not submit request: {exc}")
+                    else:
+                        st.success("Request submitted. You will be contacted once your account is created.")
+                        st.session_state.show_request_account_dialog = False
+                        for key in [
+                            "request_first_name",
+                            "request_last_name",
+                            "request_email_address",
+                            "request_job_title",
+                            "request_organization",
+                            "request_avalanche_work_description",
+                        ]:
+                            st.session_state[key] = ""
+                        st.rerun()
+
+    with cancel_col:
+        if st.button("Cancel", use_container_width=True):
+            st.session_state.show_request_account_dialog = False
+            st.rerun()
+
+
 @st.dialog("About This Tool")
 def about_dialog() -> None:
-    st.write(
-        "Welcome to the Avalanche Release Area Mapping Tool! This application allows you to draw potential avalanche release areas on an interactive map, add details about each area, and submit your findings for review and enhancement. Your contributions help improve avalanche forecasting and mapping products, ultimately supporting safer backcountry experiences."
-        "\n\nTo draw polygons, click the little pentagon icon button on the left of the map, then click your vertices. Double-click to finish. Feel free to change the basemaps on the right to help visualize different terrain features. Finally, add a Name and Description (optional) for the polygon and click Save."
-        "\n\n REMEMBER: we are looking for potential release areas, not runout zones or other features. Focus on identifying the source areas where avalanches are likely to initiate."
-        "\n\nOnce you're done, click the Send Results button to submit your findings for review and enhancement. We will review the areas, add details such as aspect, slope, curvature, and other relevant information, and send them back to you in any format you would like (specify in the comments if you see fit!)"
-    )
-    st.write("Created by Philip Elder, University of Otago Geography Department, 2026.")
+    tutorial_pages = [
+        {
+            "text": (
+                "Welcome to the Avalanche Release Area Mapping Tool! This application allows you to draw "
+                "potential avalanche release areas on an interactive map, add details about each area, and "
+                "submit your findings for review and enhancement. Your contributions help improve avalanche "
+                "forecasting and mapping products, ultimately supporting safer backcountry experiences. Click "
+                "'Next' for a brief tutorial on how to use the tool."
+            ),
+            "gif": None,
+        },
+        {
+            "text": (
+                "To draw polygons, click the little pentagon icon button on the left of the map, then click "
+                "your vertices. Double-click to finish."
+            ),
+            "gif": Path(__file__).parent / "resources" / "tutorial_1.gif",
+        },
+        {
+            "text": (
+                "Once the shape is complete, enter the name and description of the shape, including any "
+                "historical avalanche activity, and click Save."
+            ),
+            "gif": Path(__file__).parent / "resources" / "tutorial_2.gif",
+        },
+        {
+            "text": "Feel free to change the basemaps on the right to help visualize different terrain features.",
+            "gif": Path(__file__).parent / "resources" / "tutorial_3.gif",
+        },
+        {
+            "text": (
+                'Once you\'re finished drawing all of your release areas, click the "Send Results" button at '
+                "the top. REMEMBER: we are looking for potential release areas, not runout zones or other "
+                "features. Focus on identifying the source areas where avalanches are likely to initiate."
+            ),
+            "gif": Path(__file__).parent / "resources" / "tutorial_4.gif",
+        },
+    ]
+
+    total_pages = len(tutorial_pages)
+    current_page = max(0, min(st.session_state.about_page, total_pages - 1))
+    st.session_state.about_page = current_page
+    page_content = tutorial_pages[current_page]
+
+    st.caption(f"Tutorial {current_page + 1} of {total_pages}")
+    st.write(page_content["text"])
+
+    page_gif = page_content["gif"]
+    if page_gif:
+        st.image(str(page_gif), use_container_width=True)
+
+    prev_col, _, next_col = st.columns([1, 3, 1])
+    with prev_col:
+        if st.button("\u2190 Prev", use_container_width=True, disabled=current_page == 0):
+            st.session_state.about_page = current_page - 1
+            st.session_state.show_about_dialog = True
+            st.rerun()
+    with next_col:
+        next_label = "Done" if current_page == total_pages - 1 else "Next \u2192"
+        if st.button(next_label, use_container_width=True):
+            if current_page < total_pages - 1:
+                st.session_state.about_page = current_page + 1
+                st.session_state.show_about_dialog = True
+            else:
+                st.session_state.show_about_dialog = False
+            st.rerun()
+
+    st.caption("Created by Philip Elder, University of Otago Geography Department, 2026.")
 
 # Show login dialog if not authenticated
 if not st.session_state.logged_in:
-    login_dialog()
+    request_account_param = str(st.query_params.get("request_account", "")).strip().lower()
+    if request_account_param in {"1", "true", "yes", "on"}:
+        st.session_state.show_request_account_dialog = True
+        if "request_account" in st.query_params:
+            del st.query_params["request_account"]
+
+    if st.session_state.show_request_account_dialog:
+        request_account_dialog()
+    else:
+        login_dialog()
     st.stop()
 
 # Show about dialog automatically after first login
 if st.session_state.show_about_on_login:
     st.session_state.show_about_on_login = False
+    st.session_state.about_page = 0
+    st.session_state.show_about_dialog = True
+
+if st.session_state.show_about_dialog:
+    st.session_state.show_about_dialog = False
     about_dialog()
 
 @st.dialog("Send Results")
@@ -561,7 +755,9 @@ with col2:
         st.rerun()
 with col3:
     if st.button("About", use_container_width=True, help="Learn more about how to use this tool."):
-        about_dialog()
+        st.session_state.about_page = 0
+        st.session_state.show_about_dialog = True
+        st.rerun()
 with col4:
     if st.button("Log Out", use_container_width=True, help="Log out of the application."):
         st.session_state.logged_in = False
