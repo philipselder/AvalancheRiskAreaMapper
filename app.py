@@ -72,6 +72,7 @@ def init_state() -> None:
         "logged_in_username": "",
         "logged_in_email": "",
         "show_request_account_dialog": False,
+        "clear_request_account_form": False,
         "release_features": [],
         "selected_release_id": None,
         "next_release_id": 1,
@@ -585,15 +586,7 @@ def request_account_dialog() -> None:
                     else:
                         st.success("Request submitted. You will be contacted once your account is created.")
                         st.session_state.show_request_account_dialog = False
-                        for key in [
-                            "request_first_name",
-                            "request_last_name",
-                            "request_email_address",
-                            "request_job_title",
-                            "request_organization",
-                            "request_avalanche_work_description",
-                        ]:
-                            st.session_state[key] = ""
+                        st.session_state.clear_request_account_form = True
                         st.rerun()
 
     with cancel_col:
@@ -675,6 +668,18 @@ def about_dialog() -> None:
 
 # Show login dialog if not authenticated
 if not st.session_state.logged_in:
+    if st.session_state.clear_request_account_form:
+        for key in [
+            "request_first_name",
+            "request_last_name",
+            "request_email_address",
+            "request_job_title",
+            "request_organization",
+            "request_avalanche_work_description",
+        ]:
+            st.session_state.pop(key, None)
+        st.session_state.clear_request_account_form = False
+
     request_account_param = str(st.query_params.get("request_account", "")).strip().lower()
     if request_account_param in {"1", "true", "yes", "on"}:
         st.session_state.show_request_account_dialog = True
