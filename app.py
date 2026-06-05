@@ -10,7 +10,7 @@ from email.message import EmailMessage
 from html import escape
 from pathlib import Path
 
-from branca.element import MacroElement, Template
+from branca.element import Element, MacroElement, Template
 import folium
 import geopandas as gpd
 import streamlit as st
@@ -472,6 +472,69 @@ def add_basemap_layers(map_object: folium.Map, selected_basemap: str) -> None:
     ).add_to(map_object)
 
 
+def keep_layer_control_visible(map_object: folium.Map) -> None:
+    """Ensure the basemap control remains reachable in compact map containers."""
+    map_object.get_root().header.add_child(
+        Element(
+            """
+            <style>
+            .leaflet-control-container .leaflet-top.leaflet-right {
+                top: 8px;
+                right: 8px;
+            }
+
+            .leaflet-control-layers {
+                max-width: min(260px, calc(100vw - 24px));
+                max-height: calc(100% - 16px);
+                overflow-y: auto;
+                box-sizing: border-box;
+            }
+            </style>
+            """
+        )
+    )
+
+
+def apply_responsive_map_styles() -> None:
+    """Scale folium iframe height for smaller screens while keeping desktop detail."""
+    st.markdown(
+        """
+        <style>
+        iframe[title*="streamlit_folium"] {
+            height: min(78vh, 760px) !important;
+            min-height: 460px;
+        }
+
+        @media (max-width: 1024px) {
+            iframe[title*="streamlit_folium"] {
+                height: 68vh !important;
+                min-height: 420px;
+            }
+        }
+
+        @media (max-width: 640px) {
+            iframe[title*="streamlit_folium"] {
+                height: 58vh !important;
+                min-height: 360px;
+            }
+        }
+
+        @media (max-width: 980px) {
+            .stMainBlockContainer [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap;
+            }
+
+            .stMainBlockContainer [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 100% !important;
+                flex: 1 1 100% !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def sync_map_view_from_widget_state(map_key: str) -> None:
     widget_state = st.session_state.get(map_key)
     if not isinstance(widget_state, dict):
@@ -782,6 +845,7 @@ st.info("Draw potential avalanche release polygons by clicking the little pentag
 
 
 sync_map_view_from_widget_state(map_key)
+apply_responsive_map_styles()
 
 map_col, form_col = st.columns([3, 1])
 
@@ -800,11 +864,13 @@ with map_col:
     ).add_to(map_object)
 
     folium.LayerControl(collapsed=False).add_to(map_object)
+    keep_layer_control_visible(map_object)
 
     map_data = st_folium(
         map_object,
-        width=1600,
-        height=800,
+        height=760,
+        width=None,
+        use_container_width=True,
         key=map_key,
         returned_objects=["last_active_drawing", "last_object_clicked_tooltip"],
         feature_group_to_add=build_feature_group(),
