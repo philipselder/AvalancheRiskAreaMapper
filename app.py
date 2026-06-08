@@ -71,8 +71,10 @@ def init_state() -> None:
         "login_error": "",
         "logged_in_username": "",
         "logged_in_email": "",
+        "show_login_dialog": True,
         "show_request_account_dialog": False,
         "clear_request_account_form": False,
+        "request_account_success_message": "",
         "release_features": [],
         "selected_release_id": None,
         "next_release_id": 1,
@@ -589,6 +591,7 @@ def login_dialog() -> None:
         user_record = get_user_by_credentials(username, password)
         if user_record:
             st.session_state.logged_in = True
+            st.session_state.show_login_dialog = False
             st.session_state.login_error = ""
             st.session_state.logged_in_username = str(user_record.get("username", "")).strip()
             st.session_state.logged_in_email = str(user_record.get("email", "")).strip()
@@ -597,7 +600,12 @@ def login_dialog() -> None:
         else:
             st.session_state.login_error = "Invalid username or password"
 
-    st.markdown("Don't have an account? [Request one now!](?request_account=1)")
+    st.caption("Don't have an account?")
+    if st.button("Request one now!", use_container_width=True):
+        st.session_state.show_login_dialog = False
+        st.session_state.show_request_account_dialog = True
+        st.session_state.login_error = ""
+        st.rerun()
     
     if st.session_state.login_error:
         st.error(st.session_state.login_error)
@@ -606,10 +614,11 @@ def login_dialog() -> None:
 @st.dialog("Request an Account")
 def request_account_dialog() -> None:
     st.write("Complete this form to request an account.")
+    st.caption("Fields marked * are required.")
 
-    first_name = st.text_input("First Name", key="request_first_name")
-    last_name = st.text_input("Last Name", key="request_last_name")
-    email_address = st.text_input("Email Address", key="request_email_address")
+    first_name = st.text_input("First Name *", key="request_first_name")
+    last_name = st.text_input("Last Name *", key="request_last_name")
+    email_address = st.text_input("Email Address *", key="request_email_address")
     job_title = st.text_input("Job Title", key="request_job_title")
     organization = st.text_input("Organization", key="request_organization")
     avalanche_work_description = st.text_area(
@@ -618,21 +627,42 @@ def request_account_dialog() -> None:
         height=140,
     )
 
+    first_name_value = first_name.strip()
+    last_name_value = last_name.strip()
+    email_value = email_address.strip()
+    email_is_valid = bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email_value))
+    can_submit_request = bool(first_name_value and last_name_value and email_is_valid)
+
+    if email_value and not email_is_valid:
+        st.caption("Please enter a valid email address.")
+
     submit_col, cancel_col = st.columns([1, 1])
     with submit_col:
-        if st.button("Submit Request", type="primary", use_container_width=True):
+        if st.button(
+            "Submit Request",
+            type="primary",
+            use_container_width=True,
+            disabled=not can_submit_request,
+        ):
             required_values = {
-                "First Name": first_name.strip(),
-                "Last Name": last_name.strip(),
-                "Email Address": email_address.strip(),
+                "First Name": first_name_value,
+                "Last Name": last_name_value,
+                "Email Address": email_value,
                 "Job Title": job_title.strip(),
                 "Organization": organization.strip(),
                 "Describe your work with avalanches": avalanche_work_description.strip(),
             }
-            missing_fields = [label for label, value in required_values.items() if not value]
+            missing_fields = [
+                label
+                for label in ["First Name", "Last Name", "Email Address"]
+                if not required_values[label]
+            ]
+
+            if required_values["Email Address"] and not email_is_valid:
+                missing_fields.append("Valid Email Address")
 
             if missing_fields:
-                st.error(f"Please complete all fields: {', '.join(missing_fields)}")
+                st.error(f"Please complete required fields: {', '.join(missing_fields)}")
             else:
                 with st.spinner("Submitting request..."):
                     try:
@@ -647,15 +677,21 @@ def request_account_dialog() -> None:
                     except Exception as exc:
                         st.error(f"Could not submit request: {exc}")
                     else:
-                        st.success("Request submitted. You will be contacted once your account is created.")
-                        st.session_state.show_request_account_dialog = False
+                        st.session_state.request_account_success_message = (
+                            "Thank you! Your request is being processed and you will receive an email with "
+                            "login details once approved."
+                        )
                         st.session_state.clear_request_account_form = True
                         st.rerun()
 
     with cancel_col:
         if st.button("Cancel", use_container_width=True):
             st.session_state.show_request_account_dialog = False
+            st.session_state.show_login_dialog = True
             st.rerun()
+
+    if st.session_state.request_account_success_message:
+        st.success(st.session_state.request_account_success_message)
 
 
 @st.dialog("About This Tool")
@@ -743,15 +779,24 @@ if not st.session_state.logged_in:
             st.session_state.pop(key, None)
         st.session_state.clear_request_account_form = False
 
+    _, auth_col, _ = st.columns([1, 1.2, 1])
+    with auth_col:
+        st.markdown("<h1 style='text-align: center; margin-bottom: 0.25rem;'>whumpf.</h1>", unsafe_allow_html=True)
+        if st.button("Login/Register", type="primary", use_container_width=True):
+            st.session_state.show_login_dialog = True
+            st.session_state.show_request_account_dialog = False
+            st.rerun()
+
     request_account_param = str(st.query_params.get("request_account", "")).strip().lower()
     if request_account_param in {"1", "true", "yes", "on"}:
         st.session_state.show_request_account_dialog = True
+        st.session_state.show_login_dialog = False
         if "request_account" in st.query_params:
             del st.query_params["request_account"]
 
     if st.session_state.show_request_account_dialog:
         request_account_dialog()
-    else:
+    elif st.session_state.show_login_dialog:
         login_dialog()
     st.stop()
 
@@ -829,6 +874,8 @@ with col3:
 with col4:
     if st.button("Log Out", use_container_width=True, help="Log out of the application."):
         st.session_state.logged_in = False
+        st.session_state.show_login_dialog = True
+        st.session_state.show_request_account_dialog = False
         st.session_state.login_error = ""
         st.session_state.logged_in_username = ""
         st.session_state.logged_in_email = ""
