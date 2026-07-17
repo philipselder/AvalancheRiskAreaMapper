@@ -19,8 +19,8 @@ from shapely.geometry import shape
 from streamlit_folium import st_folium
 
 
-st.set_page_config(page_title="Avalanche Release Area Mapping Tool", layout="wide")
-# st.title("Avalanche Release Area Mapping Tool")
+st.set_page_config(page_title="Avalanche Atlas Mapping Tool", layout="wide")
+# st.title("Avalanche Atlas Mapping Tool")
 
 
 RESULTS_RECIPIENT = "philip.s.elder@gmail.com"
@@ -233,7 +233,7 @@ def send_results_email(
     comments = comments.strip()
 
     body_lines = [
-        "Avalanche Release Area Mapper submission attached.",
+        "Avalanche Atlas Mapper submission attached.",
         "",
         f"Submitter name: {submitter_name if submitter_name else 'Not provided'}",
         f"Submitter email: {submitter_email if submitter_email else 'Not provided'}",
@@ -242,7 +242,7 @@ def send_results_email(
         body_lines.extend(["", "Comments:", comments])
 
     send_email_message(
-        subject=f"Avalanche Release Area Mapper Results - {submitter_name or 'Unknown Submitter'}",
+        subject=f"Avalanche Atlas Mapper Results - {submitter_name or 'Unknown Submitter'}",
         body="\n".join(body_lines),
         attachments=[
             {
@@ -297,7 +297,7 @@ def send_account_request_email(
 ) -> None:
     """Send account request details to the configured results recipient."""
     body_lines = [
-        "New account request for Avalanche Release Area Mapping Tool.",
+        "New account request for Avalanche Atlas Mapping Tool.",
         "",
         f"First Name: {first_name}",
         f"Last Name: {last_name}",
@@ -379,12 +379,12 @@ def build_feature_group() -> folium.FeatureGroup:
         properties = release_feature.get("properties", {})
         release_id = properties.get("release_id", "")
         name = properties.get("name", "")
-        display_name = name if name else f"PRA {release_id}"
+        display_name = name if name else f"AAP {release_id}"
 
         folium.GeoJson(
             release_feature,
-            name="Potential Avalanche Release Area",
-            tooltip=f"PRA_ID:{release_id}",
+            name="Avalanche Path",
+            tooltip=f"AAP_ID:{release_id}",
             popup=f"{display_name}\n{properties.get('description', '')}",
             style_function=lambda _feature: {
                 "color": "#d62728",
@@ -439,7 +439,7 @@ def get_release_index_by_id(release_id: int | None) -> int | None:
 def parse_release_id_from_tooltip(tooltip_value: str | None) -> int | None:
     if not tooltip_value:
         return None
-    if not tooltip_value.startswith("PRA_ID:"):
+    if not tooltip_value.startswith("AAP_ID:"):
         return None
 
     try:
@@ -699,8 +699,8 @@ def about_dialog() -> None:
     tutorial_pages = [
         {
             "text": (
-                "Welcome to the Avalanche Release Area Mapping Tool! This application allows you to draw "
-                "potential avalanche release areas on an interactive map, add details about each area, and "
+                "Welcome to the Avalanche Atlas Mapping Tool! This application allows you to draw "
+                "potential avalanche paths on an interactive map, add details about each area, and "
                 "submit your findings for review and enhancement. Your contributions help improve avalanche "
                 "forecasting and mapping products, ultimately supporting safer backcountry experiences. Click "
                 "'Next' for a brief tutorial on how to use the tool."
@@ -727,9 +727,8 @@ def about_dialog() -> None:
         },
         {
             "text": (
-                'Once you\'re finished drawing all of your release areas, click the "Send Results" button at '
-                "the top. REMEMBER: we are looking for potential release areas, not runout zones or other "
-                "features. Focus on identifying the source areas where avalanches are likely to initiate."
+                'Once you\'re finished drawing all of your avalanche area polygons, click the "Send Results" button at '
+                "the top."
             ),
             "gif": Path(__file__).parent / "resources" / "tutorial_4.gif",
         },
@@ -814,7 +813,7 @@ if st.session_state.show_about_dialog:
 def send_results(zip_payload: bytes) -> None:
     submitter_name, submitter_email = get_submitter_identity()
     st.write(
-        f"The current release areas will be zipped and sent via email for processing."
+        f"The current avalanche area polygons will be zipped and sent via email for processing."
         " They will be reviewed and enhanced, and sent back to the submitter for use in avalanche forecasting and mapping products."
         " Submitter details are pulled from the logged-in account."
         " Thanks for contributing to avalanche safety!"
@@ -830,14 +829,14 @@ def send_results(zip_payload: bytes) -> None:
             except Exception as exc:
                 st.error(f"Could not send email: {exc}")
             else:
-                st.success(f"Release areas sent! You will receive the results soon at {submitter_email if submitter_email else 'your email address'}.")
+                st.success(f"Avalanche area polygons sent! You will receive the results soon at {submitter_email if submitter_email else 'your email address'}.")
 
 map_key = f"main_map_{st.session_state.map_refresh_counter}"
 
 # Logout button (only show when logged in)
 col0, col1, col2, col3, col4 = st.columns([0.65, 0.1, 0.08, 0.08, 0.08])
 with col0:
-    st.markdown("# Avalanche Release Area Mapping Tool")
+    st.markdown("# Avalanche Atlas Mapping Tool")
 with col1:
     can_download = (
         st.session_state.logged_in
@@ -849,7 +848,7 @@ with col1:
         if col1.button(
             "Send Results",
             use_container_width=True,
-            help=f"Finished? Send your release areas to be processed.",
+            help=f"Finished? Send your avalanche area polygons to be processed.",
         ):
             send_results(zip_payload)
     else:
@@ -857,10 +856,10 @@ with col1:
             "Send Results",
             use_container_width=True,
             disabled=True,
-            help="Draw at least one release area first.",
+            help="Draw at least one avalanche area polygon first.",
         )
 with col2:
-    if st.button("Clear PRAs", use_container_width=True, disabled=not st.session_state.logged_in, help="Clear all potential release area polygons."):
+    if st.button("Clear Polygons", use_container_width=True, disabled=not st.session_state.logged_in, help="Clear all avalanche area polygons."):
         st.session_state.release_features = []
         st.session_state.selected_release_id = None
         st.session_state.next_release_id = 1
@@ -882,7 +881,7 @@ with col4:
         st.rerun()
 
 
-st.info("Draw potential avalanche release polygons by clicking the little pentagon icon on the left. Double-click to finish drawing.")
+st.info("Draw potential avalanche area polygons by clicking the little pentagon icon on the left. Double-click to finish drawing.")
 
 # st.selectbox(
 #     "Basemap",
@@ -974,7 +973,7 @@ with form_col:
     else:
         selected_feature = st.session_state.release_features[selected_index]
         selected_properties = selected_feature.get("properties", {})
-        st.caption(f"Selected polygon: PRA {selected_properties.get('release_id')}")
+        st.caption(f"Selected polygon: AAP {selected_properties.get('release_id')}")
 
         name_value = st.text_input(
             "Name",
